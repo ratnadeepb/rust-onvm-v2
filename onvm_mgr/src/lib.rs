@@ -8,6 +8,8 @@
 pub mod mgr;
 pub mod nflib;
 
+use nflib::{common, msg_common};
+
 #[cfg(test)]
 mod tests {
     #[test]
