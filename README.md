@@ -103,6 +103,10 @@ cd $RTE_SDK
 driver=$(find . -name igb_uio.ko | awk '{if (NR == 1) print$1}')
 sudo insmod $driver
 sudo modprobe igb_uio
+curl -o dpdk_helper_scripts.sh https://raw.githubusercontent.com/sdnfv/openNetVM/master/scripts/dpdk_helper_scripts.sh
+. dpdk_helper_scripts.sh
+remove_igb_uio_module
+set_numa_pages
 ```
 
 ## Makefile
