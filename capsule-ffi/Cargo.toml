@@ -1,0 +1,27 @@
+[package]
+name = "capsule-ffi"
+version = "0.1.4"
+authors = ["Capsule Developers <capsule-dev@googlegroups.com>"]
+license = "Apache-2.0"
+edition = "2018"
+repository = "https://github.com/capsule-rs/capsule"
+build = "build.rs"
+links = "dpdk"
+description = """
+Capsule FFI bindings for native libraries.
+"""
+
+[lib]
+name = "capsule_ffi"
+doctest = false
+
+[build-dependencies]
+bindgen = "0.53"
+cc = "1.0"
+libc = "0.2"
+
+[features]
+rustdoc = []
+
+[package.metadata.docs.rs]
+features = ["rustdoc"]
