@@ -14,25 +14,28 @@ use capsule_ffi::{rte_atomic16_t, rte_ether_addr, rte_mbuf, rte_ring};
 // Constants
 use capsule_ffi::{RTE_LOGTYPE_USER1, RTE_MAX_ETHPORTS};
 // use capsule::Mbuf;
+// use std::{mem, ptr};
+use std::cell::RefCell;
+
 // true when NFs pass packets to each other
-const ONVM_NF_HANDLE_TX: bool = true;
+pub const ONVM_NF_HANDLE_TX: bool = true;
 // should be true if on NF shutdown onvm_mgr tries to reallocate cores
-const ONVM_NF_SHUTDOWN_CORE_REASSIGNMENT: bool = false;
+pub const ONVM_NF_SHUTDOWN_CORE_REASSIGNMENT: bool = false;
 // the maximum chain length
-const ONVM_MAX_CHAIN_LENGTH: u8 = 4;
+pub const ONVM_MAX_CHAIN_LENGTH: u8 = 4;
 // total number of concurrent NFs allowed (-1 because ID 0 is reserved)
-const MAX_NFS: u8 = 128;
+pub const MAX_NFS: u8 = 128;
 // total number of unique services allowed
-const MAX_SERVICES: u8 = 32;
+pub const MAX_SERVICES: u8 = 32;
 // max number of NFs per service.
-const MAX_NFS_PER_SERVICE: u8 = 32;
+pub const MAX_NFS_PER_SERVICE: u8 = 32;
 // total number of mbufs (2^15 - 1)
-const NUM_MBUFS: u16 = 32767;
+pub const NUM_MBUFS: u16 = 32767;
 // size of queue for NFs
-const NF_QUEUE_RINGSIZE: usize = 16384;
-const PACKET_READ_SIZE: usize = 32;
+pub const NF_QUEUE_RINGSIZE: usize = 16384;
+pub const PACKET_READ_SIZE: usize = 32;
 // default value for shared core logic, if true NFs sleep while waiting for packets
-const ONVM_NF_SHARE_CORES_DEFAULT: bool = false;
+pub const ONVM_NF_SHARE_CORES_DEFAULT: bool = false;
 
 pub enum OnvmAction {
 	DROP, // drop packet
@@ -125,6 +128,7 @@ pub fn onvm_get_pkt_chain_index(pkt: &rte_mbuf) -> Option<u8> {
 // Data Structures
 
 /// Local buffers to put packets in, used to send packets in bursts to the NFs or to the NIC
+#[derive(Default)]
 pub struct PacketBuf {
 	// these packets are to be sent out
 	// so we are going to take over ownsership
@@ -135,7 +139,7 @@ pub struct PacketBuf {
 }
 
 impl PacketBuf {
-	pub fn new(&self) -> Self {
+	pub fn new() -> Self {
 		Self {
 			buffer: Vec::with_capacity(PACKET_READ_SIZE),
 			count: 0,
@@ -153,20 +157,31 @@ pub struct TxThreadInfo<'nf> {
 	first_nf: u8,
 	last_nf: u8,
 	// the port tx bufs exist as long
-	port_tx_bufs: &'nf mut PacketBuf,
+	port_tx_bufs: Option<&'nf mut PacketBuf>,
 }
 
 impl<'nf> TxThreadInfo<'nf> {
-	pub fn new(&self, first_nf: u8, last_nf: u8, port_tx_bufs: &'nf mut PacketBuf) -> Self {
+	pub fn new(first_nf: u8, last_nf: u8, port_tx_bufs: &'nf mut PacketBuf) -> Self {
 		Self {
 			first_nf,
 			last_nf,
-			port_tx_bufs,
+			port_tx_bufs: Some(port_tx_bufs),
 		}
 	}
 
 	pub fn add_mbuf(&mut self, pkt: rte_mbuf) {
-		self.port_tx_bufs.add_mbuf(pkt);
+		match self.port_tx_bufs.take() {
+			Some(tx_buf) => {
+				tx_buf.add_mbuf(pkt);
+				// mem::replace(&mut self.port_tx_bufs, Some(tx_buf));
+				self.port_tx_bufs = Some(tx_buf);
+			}
+			None => {
+				let mut tx_buf = Box::new(PacketBuf::new());
+				tx_buf.add_mbuf(pkt);
+				self.port_tx_bufs = unsafe { Some(&mut *Box::into_raw(tx_buf)) };
+			}
+		}
 	}
 }
 
@@ -187,26 +202,20 @@ pub struct QueueMgr<'nf> {
 	id: u8,
 	mgr_type: MgrTypeT,
 	buf: Qmgr<'nf>,
-	nf_rx_buf: &'nf PacketBuf,
+	nf_rx_buf: Option<&'nf PacketBuf>,
 }
 
 impl<'nf> QueueMgr<'nf> {
-	fn get_self(
-		&self,
-		id: u8,
-		mgr_type: MgrTypeT,
-		buf: Qmgr<'nf>,
-		nf_rx_buf: &'nf PacketBuf,
-	) -> Self {
+	#[inline]
+	fn get_self(id: u8, mgr_type: MgrTypeT, buf: Qmgr<'nf>, nf_rx_buf: &'nf PacketBuf) -> Self {
 		Self {
 			id,
 			mgr_type,
 			buf,
-			nf_rx_buf,
+			nf_rx_buf: Some(nf_rx_buf),
 		}
 	}
 	pub fn new(
-		&self,
 		id: u8,
 		mgr_type: MgrTypeT,
 		buf: Qmgr<'nf>,
@@ -215,11 +224,11 @@ impl<'nf> QueueMgr<'nf> {
 		// QmgrType mgr_type should always have the correct associated buffer type
 		match mgr_type {
 			MgrTypeT::MGR => match buf {
-				Qmgr::Mgr(_) => Some(self.get_self(id, mgr_type, buf, nf_rx_buf)),
+				Qmgr::Mgr(_) => Some(Self::get_self(id, mgr_type, buf, nf_rx_buf)),
 				Qmgr::NF(_) => None,
 			},
 			MgrTypeT::NF => match buf {
-				Qmgr::NF(_) => Some(self.get_self(id, mgr_type, buf, nf_rx_buf)),
+				Qmgr::NF(_) => Some(Self::get_self(id, mgr_type, buf, nf_rx_buf)),
 				Qmgr::Mgr(_) => None,
 			},
 		}
@@ -237,29 +246,33 @@ pub struct WakeupThreadContext {
 // 	mutex: &RwLock,
 // }
 
+#[derive(Default)]
 pub struct RxStats {
 	rx: [u64; RTE_MAX_ETHPORTS as usize],
 }
 
+#[derive(Default)]
 pub struct TxStats {
 	tx: [u64; RTE_MAX_ETHPORTS as usize],
 	tx_drop: [u64; RTE_MAX_ETHPORTS as usize],
 }
 
+#[derive(Default)]
 struct EtherAddr {
 	addr_bytes: [u8; 6],
 }
 
 impl EtherAddr {
-	fn new(&self, addr_bytes: [u8; 6]) -> Self {
+	fn new(addr_bytes: [u8; 6]) -> Self {
 		Self { addr_bytes }
 	}
 
 	fn from_rte_ether_addr(&self, addr: rte_ether_addr) -> Self {
-		self.new(addr.addr_bytes)
+		Self::new(addr.addr_bytes)
 	}
 }
 
+#[derive(Default)]
 pub struct PortInfo {
 	num_ports: u8,
 	id: [u8; RTE_MAX_ETHPORTS as usize],
@@ -269,14 +282,17 @@ pub struct PortInfo {
 	tx_stats: TxStats,
 }
 
+#[derive(Default)]
 struct Flag {
 	onvm_nf_share_cores: u8,
 }
 
+#[derive(Default)]
 pub struct OnvmConfiguration {
 	flags: Flag,
 }
 
+#[derive(Default)]
 pub struct CoreStatus {
 	enabled: bool,
 	is_dedicated_core: bool,
@@ -310,7 +326,7 @@ pub struct OnvmFunctionTable {
 pub struct OnvmScaleInfo {}
 
 pub struct OnvmNfLocalCtx<'nf> {
-	nf: &'nf OnvmNF<'nf>,
+	nf: Option<&'nf OnvmNF<'nf>>,
 	nf_init_finished: rte_atomic16_t,
 	keep_running: rte_atomic16_t,
 	nf_stopped: rte_atomic16_t,
@@ -330,18 +346,21 @@ struct Stats {
 	act_buffer: u64,
 }
 
+#[derive(Default)]
 struct Flags {
 	init_options: u16, // if set NF will stop after time reaches time_to_live
 	time_to_live: u16, // If set NF will stop after pkts TX reach pkt_limit
 	pkt_limit: u16,
 }
 
+#[derive(Default)]
 struct ThreadInfo {
 	core: u16, // Instance ID of parent NF or 0
 	parent: u16,
 	children_cut: rte_atomic16_t,
 }
 
+#[derive(Default)]
 struct SharedCore {
 	// Sleep state (shared mem variable) to track state of NF and trigger wakeups
 	// sleep_state = 1 => NF sleeping (waiting on semaphore)
@@ -354,24 +373,36 @@ struct SharedCore {
 /// 	thread information, function callbacks, flags, stats and shared core info.
 /// This structure is available in the NF when processing packets or executing the callback.
 /// nf denotes the lifetime of the nf
+#[derive(Default)]
 pub struct OnvmNF<'nf> {
-	rx_q: &'nf rte_ring,
-	tx_q: &'nf rte_ring,
-	msg_q: &'nf rte_ring,
-	nf_tx_mgr: &'nf QueueMgr<'nf>,
+	rx_q: Option<&'nf rte_ring>,
+	tx_q: Option<&'nf rte_ring>,
+	msg_q: Option<&'nf rte_ring>,
+	nf_tx_mgr: Option<&'nf QueueMgr<'nf>>,
 	instance_id: u16,
 	service_id: u16,
 	status: u8,
-	tag: &'nf str,
+	tag: Option<&'nf str>,
 	// FIXME: we need to figure out what msg_data should be
 	// Connected to msg_common_rs::OnvmNfMsg
 	// void *data;
 	thread_info: ThreadInfo,
 	flags: Flags,
-	function_table: &'nf OnvmFunctionTable,
-	stats: &'nf String,
-	shared_core: &'nf SharedCore,
+	function_table: Option<&'nf OnvmFunctionTable>,
+	stats: Option<&'nf String>,
+	shared_core: Option<&'nf SharedCore>,
 }
+
+// impl<'nf> Default for OnvmNF<'nf> {
+// 	fn default() -> Self {
+// 		Self {
+// 			rx_q: unsafe {&(*(ptr::null()))},
+// 			tx_q: unsafe { &mem::MaybeUninit::<rte_ring>::uninit().assume_init() },
+// 			msg_q: unsafe { &mem::MaybeUninit::<rte_ring>::uninit().assume_init() },
+// 			..Default::default()
+// 		}
+// 	}
+// }
 
 /// The config structure to inialize the NF with onvm_mgr
 pub struct OnvmNfInitCfg<'nf> {
@@ -380,7 +411,7 @@ pub struct OnvmNfInitCfg<'nf> {
 	core: u16,
 	init_options: u16,
 	status: u8,
-	tag: &'nf str,
+	tag: Option<&'nf str>,
 	// If set NF will stop after time reaches time_to_live
 	time_to_live: u16,
 	// If set NF will stop after pkts TX reach pkt_limit
@@ -388,11 +419,13 @@ pub struct OnvmNfInitCfg<'nf> {
 }
 
 /// Define a structure to describe a service chain entry
+#[derive(Default)]
 pub struct OnvmServiceChainEntry {
 	destination: u16,
 	action: u8,
 }
 
+#[derive(Default)]
 pub struct OnvmServiceChain {
 	sc: [OnvmServiceChainEntry; ONVM_MAX_CHAIN_LENGTH as usize],
 	chain_length: u8,
@@ -411,44 +444,52 @@ pub struct LpmRequest {
 pub struct FtRequest {}
 
 /// define common names for structures shared between server and NF
-const MP_NF_RXQ_NAME: &str = "MProc_Client_{}_RX";
-const MP_NF_TXQ_NAME: &str = "MProc_Client_{}_TX";
-const MP_CLIENT_SEM_NAME: &str = "MProc_Client_{}_SEM";
-const PKTMBUF_POOL_NAME: &str = "MProc_pktmbuf_pool";
-const MZ_PORT_INFO: &str = "MProc_port_info";
-const MZ_CORES_STATUS: &str = "MProc_cores_info";
-const MZ_NF_INFO: &str = "MProc_nf_init_cfg";
-const MZ_SERVICES_INFO: &str = "MProc_services_info";
-const MZ_NF_PER_SERVICE_INFO: &str = "MProc_nf_per_service_info";
-const MZ_ONVM_CONFIG: &str = "MProc_onvm_config";
-const MZ_SCP_INFO: &str = "MProc_scp_info";
-const MZ_FTP_INFO: &str = "MProc_ftp_info";
-const _MGR_MSG_QUEUE_NAME: &str = "MSG_MSG_QUEUE";
-const _NF_MSG_QUEUE_NAME: &str = "NF_%u_MSG_QUEUE";
-const _NF_MEMPOOL_NAME: &str = "NF_INFO_MEMPOOL";
-const _NF_MSG_POOL_NAME: &str = "NF_MSG_MEMPOOL";
+pub const MP_NF_RXQ_NAME: &str = "MProc_Client_{}_RX";
+pub const MP_NF_TXQ_NAME: &str = "MProc_Client_{}_TX";
+pub const MP_CLIENT_SEM_NAME: &str = "MProc_Client_{}_SEM";
+pub const PKTMBUF_POOL_NAME: &str = "MProc_pktmbuf_pool";
+pub const MZ_PORT_INFO: &str = "MProc_port_info";
+pub const MZ_CORES_STATUS: &str = "MProc_cores_info";
+pub const MZ_NF_INFO: &str = "MProc_nf_init_cfg";
+pub const MZ_SERVICES_INFO: &str = "MProc_services_info";
+pub const MZ_NF_PER_SERVICE_INFO: &str = "MProc_nf_per_service_info";
+pub const MZ_ONVM_CONFIG: &str = "MProc_onvm_config";
+pub const MZ_SCP_INFO: &str = "MProc_scp_info";
+pub const MZ_FTP_INFO: &str = "MProc_ftp_info";
+pub const _MGR_MSG_QUEUE_NAME: &str = "MSG_MSG_QUEUE";
+pub const _NF_MSG_QUEUE_NAME: &str = "NF_%u_MSG_QUEUE";
+pub const _NF_MEMPOOL_NAME: &str = "NF_INFO_MEMPOOL";
+pub const _NF_MSG_POOL_NAME: &str = "NF_MSG_MEMPOOL";
 
 /// interrupt semaphore specific updates
-const SHMSZ: u8 = 4; // size of shared memory segement (page_size)
-const KEY_PREFIX: u8 = 123; // prefix len for key
+pub const SHMSZ: u8 = 4; // size of shared memory segement (page_size)
+pub const KEY_PREFIX: u8 = 123; // prefix len for key
 
 /// common names for NF states
-const NF_WAITING_FOR_ID: u8 = 0; // First step in startup process, doesn't have ID confirmed by manager yet
-const NF_STARTING: u8 = 1; // When a NF is in the startup process and already has an id
-const NF_RUNNING: u8 = 2; // Running normally
-const NF_PAUSED: u8 = 3; // NF is not receiving packets, but may in the future
-const NF_STOPPED: u8 = 4; // NF has stopped and in the shutdown process
-const NF_ID_CONFLICT: u8 = 5; // NF is trying to declare an ID already in use
-const NF_NO_IDS: u8 = 6; // There are no available IDs for this NF
-const NF_SERVICE_MAX: u8 = 7; // Service ID has exceeded the maximum amount
-const NF_SERVICE_COUNT_MAX: u8 = 8; // Maximum amount of NF's per service spawned
-const NF_NO_CORES: u8 = 9; // There are no cores available or specified core can't be used
-const NF_NO_DEDICATED_CORES: u8 = 10; // There is no space for a dedicated core
-const NF_CORE_OUT_OF_RANGE: u8 = 11; // The manually selected core is out of range
-const NF_CORE_BUSY: u8 = 12; // The manually selected core is busy
-const NF_WAITING_FOR_LPM: u8 = 13; // NF is waiting for a LPM request to be fulfilled
-const NF_WAITING_FOR_FT: u8 = 14; // NF is waiting for a flow-table request to be fulfilled
-const NF_NO_ID: i8 = -1;
+pub const NF_WAITING_FOR_ID: u8 = 0; // First step in startup process, doesn't have ID confirmed by manager yet
+pub const NF_STARTING: u8 = 1; // When a NF is in the startup process and already has an id
+pub const NF_RUNNING: u8 = 2; // Running normally
+pub const NF_PAUSED: u8 = 3; // NF is not receiving packets, but may in the future
+pub const NF_STOPPED: u8 = 4; // NF has stopped and in the shutdown process
+pub const NF_ID_CONFLICT: u8 = 5; // NF is trying to declare an ID already in use
+pub const NF_NO_IDS: u8 = 6; // There are no available IDs for this NF
+pub const NF_SERVICE_MAX: u8 = 7; // Service ID has exceeded the maximum amount
+pub const NF_SERVICE_COUNT_MAX: u8 = 8; // Maximum amount of NF's per service spawned
+pub const NF_NO_CORES: u8 = 9; // There are no cores available or specified core can't be used
+pub const NF_NO_DEDICATED_CORES: u8 = 10; // There is no space for a dedicated core
+pub const NF_CORE_OUT_OF_RANGE: u8 = 11; // The manually selected core is out of range
+pub const NF_CORE_BUSY: u8 = 12; // The manually selected core is busy
+pub const NF_WAITING_FOR_LPM: u8 = 13; // NF is waiting for a LPM request to be fulfilled
+pub const NF_WAITING_FOR_FT: u8 = 14; // NF is waiting for a flow-table request to be fulfilled
+pub const NF_NO_ID: i8 = -1;
+
+pub const NO_FLAGS: u32 = 0;
+
+pub const RSS_SYMMETRIC_KEY: RefCell<[u8; 40]> = RefCell::new([
+	0x6d, 0x5a, 0x6d, 0x5a, 0x6d, 0x5a, 0x6d, 0x5a, 0x6d, 0x5a, 0x6d, 0x5a, 0x6d, 0x5a, 0x6d, 0x5a,
+	0x6d, 0x5a, 0x6d, 0x5a, 0x6d, 0x5a, 0x6d, 0x5a, 0x6d, 0x5a, 0x6d, 0x5a, 0x6d, 0x5a, 0x6d, 0x5a,
+	0x6d, 0x5a, 0x6d, 0x5a, 0x6d, 0x5a, 0x6d, 0x5a,
+]);
 
 /// Given the rx queue name template above, get the queue name
 fn get_rx_queue_name(id: u8) -> String {
