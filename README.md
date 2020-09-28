@@ -115,3 +115,12 @@ The Makefile is rather simple as of now.</br>
 By default, running `make` runs `cargo check` but so does `make check`. Similarly, there are options to `make debug`, `make release` and `make run` and they behave in manners suggested by the target names.
 
 <b>As of now, I doubt running `make run` will be much helpful</b>
+
+## Lofty, long term Goals and Differences with openNetVM
+
+Unlike openNetVM, which aims support run any generic network function, the goals for this project are to:
+- use the openNetVM manager work as a Layer 2 switch.
+- use the DPDK rings as a virtual interface to an associated sidecar proxy container
+- run a TCP stack in the proxy container
+- build yaml support in the proxy container to configure the proxy to forward packets to a backend container
+- build support to implement network policies at both Layer 2 (openNetVM manager) and Layer 3 (the sidecar TCP stack)
