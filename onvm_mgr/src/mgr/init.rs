@@ -99,6 +99,14 @@ const TX_WTHRESH: usize = 0; // Default values of TX write-back threshold reg
 // 	static GLOBAL_VERBOSITY_LEVEL: RefCell<u8> = RefCell::new(0);
 // );
 
+// Initialise the default onvm config structure
+fn set_default_config(config: &mut common::OnvmConfiguration) {
+	match common::ONVM_NF_SHARE_CORES_DEFAULT {
+		true => config.set_flag(0),
+		false => config.set_flag(1),
+	};
+}
+
 // Show exit error
 fn exit_on_failure(msg: &'static str, context: &str) -> Result<(), failure::Error> {
 	let err = failure::err_msg(msg);
@@ -202,25 +210,36 @@ fn init(mut argc: c_int, mut argv: *mut *mut c_char) -> Result<(), ExitFailure> 
 		// get total number of ports
 		total_ports = Arc::new(RwLock::new(rte_eth_dev_count_avail()));
 		// set up array for NF tx data
+		// rte_memzone_reserve() returns a `*const capsule-ffi::rte_memzone` ptr, which is held in `m_n`
 		let m_n = rte_memzone_reserve(
 			common::MZ_NF_INFO as *const _ as *const c_char,
 			(mem::size_of::<common::OnvmNF>() as u64) * common::MAX_NFS as u64,
 			rte_socket_id() as i32,
 			common::NO_FLAGS,
 		);
+		// `m_n` is a raw pointer so its validity need to be tested
 		if m_n.is_null() {
 			rte_exit(
 				1,
 				"Cannot reserve memory zone for nf information\n" as *const _ as *const i8,
 			);
 		}
+		// this convoluted line is the equivalent of C `memset(0)` - zero out the memory in the `addr` field of `rte_memzone`
 		(*(m_n as *mut rte_memzone)).__bindgen_anon_2.addr = mem::zeroed();
+		// assign the contents of the memzone held by `m_n` to `mz_nf`
+		// encapsulates the memzone on a RwLock inside an atomically reference counter memory block
+		// mz_nf can be easily, efficiently and safely shared between threads
 		mz_nf = Arc::new(RwLock::new(*m_n));
 		{
+			// get a write lock on `OnvmNF nfs`
 			let mut nfs_w = &*nfs.write().unwrap();
+			// get a read lock on `mz_nf`
 			let mz_nf_r = *mz_nf.read().unwrap();
+			// forcefully, cast the addr field of mz_nf as an OnvmNf
+			// we assume this operation is valid since it is valid in the equivalent C code
+			// https://github.com/sdnfv/openNetVM/blob/27d9ed5d06ebcc987f36f8860b1935aaddc8cf1c/onvm/onvm_mgr/onvm_init.c#L165
 			nfs_w = &*(mz_nf_r.__bindgen_anon_2.addr as *mut common::OnvmNF);
-		} // locks are dropped
+		} // locks are dropped at end of scope
 
 		// set up ports info
 		let m_p = rte_memzone_reserve(
@@ -235,7 +254,6 @@ fn init(mut argc: c_int, mut argv: *mut *mut c_char) -> Result<(), ExitFailure> 
 				"Cannot reserve memory zone for port information\n" as *const _ as *const i8,
 			);
 		}
-		(*(m_p as *mut rte_memzone)).__bindgen_anon_2.addr = mem::zeroed();
 		mz_port = Arc::new(RwLock::new(*m_p));
 		{
 			let mut ports_w = &*ports.write().unwrap();
@@ -256,7 +274,6 @@ fn init(mut argc: c_int, mut argv: *mut *mut c_char) -> Result<(), ExitFailure> 
 				"Cannot reserve memory zone for core information\n" as *const _ as *const i8,
 			);
 		}
-		(*(m_c as *mut rte_memzone)).__bindgen_anon_2.addr = mem::zeroed();
 		mz_cores = Arc::new(RwLock::new(*m_p));
 		{
 			let mut cores_w = &*cores.write().unwrap();
@@ -277,7 +294,6 @@ fn init(mut argc: c_int, mut argv: *mut *mut c_char) -> Result<(), ExitFailure> 
 				"Cannot reserve memory zone for services information\n" as *const _ as *const i8,
 			);
 		}
-		(*(m_s as *mut rte_memzone)).__bindgen_anon_2.addr = mem::zeroed();
 		mz_services = Arc::new(RwLock::new(*m_s));
 		{
 			let mut nf_w = &*services.write().unwrap();
@@ -313,7 +329,32 @@ fn init(mut argc: c_int, mut argv: *mut *mut c_char) -> Result<(), ExitFailure> 
 			let mz_cores_r = *mz_nf_per_service.read().unwrap();
 			nf_w = &mz_cores_r.__bindgen_anon_2.addr;
 		} // locks are dropped
-	}
 
+		// set up custom flags
+		let m_f = rte_memzone_reserve(
+			common::MZ_ONVM_CONFIG as *const _ as *const c_char,
+			mem::size_of::<u16>() as u64,
+			rte_socket_id() as i32,
+			common::NO_FLAGS,
+		);
+		if m_f.is_null() {
+			rte_exit(
+				1,
+				"Cannot reserve memory zone for ONVM custom flags.\n" as *const _ as *const i8,
+			);
+		}
+		mz_onvm_config = Arc::new(RwLock::new(*m_f));
+		{
+			// mut reference is required by set_default_config
+			let mut nf_cfg_w = &mut *onvm_config.write().unwrap();
+			let mz_conf_r = *mz_onvm_config.read().unwrap();
+			// since `nf_cfg_w` was mut we need this reference to be mut too
+			nf_cfg_w =
+				&mut *(mz_conf_r.__bindgen_anon_2.addr as *mut _ as *mut common::OnvmConfiguration);
+			set_default_config(nf_cfg_w);
+		} // locks dropped
+
+		// parse additional, application arguments
+	}
 	Ok(())
 }

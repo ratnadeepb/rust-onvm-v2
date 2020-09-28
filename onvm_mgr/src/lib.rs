@@ -9,6 +9,7 @@ pub mod mgr;
 pub mod nflib;
 
 use nflib::{common, msg_common};
+use mgr::{get_args, init};
 
 #[cfg(test)]
 mod tests {
