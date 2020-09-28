@@ -7,7 +7,7 @@ edition = "2018"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-capsule-ffi = "0.1.4"
-# capsule = "0.1.4"
 bit_field = "0.10.1"
-# failure = "0.1.8"
+failure = "0.1.8"
+exitfailure = "0.5.1"
+capsule-ffi = {path = "../capsule-ffi"}
