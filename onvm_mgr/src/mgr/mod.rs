@@ -3,5 +3,6 @@
  * Created by Ratnadeep Bhattacharya
  */
 
-#[allow(dead_code)]
+#[allow(dead_code, unused_variables, unused_assignments, unused_imports)]
+// remove once the code stabilises
 pub mod init;
