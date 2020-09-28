@@ -292,6 +292,12 @@ pub struct OnvmConfiguration {
 	flags: Flag,
 }
 
+impl OnvmConfiguration {
+	pub fn set_flag(&mut self, share: u8) {
+		self.flags.onvm_nf_share_cores = share;
+	}
+}
+
 #[derive(Default)]
 pub struct CoreStatus {
 	enabled: bool,
