@@ -26,6 +26,7 @@ use std::sync::{Arc, RwLock};
 /* the struct denoting the global state */
 pub struct GlobalState {
 	// REVIEW: is the type correct? Do they need to be thread-safe (RwLock)?
+	// REVIEW: Still debating if global state fields should be Arc<RwLock<_>> or not. A speed vs safety debate.
 	// NOTE: the lifetime is static since we expect the global state to last throughout the program
 	incoming_msg_queue: *mut rte_ring,
 	pktmbuf_pool: *mut rte_ring,
