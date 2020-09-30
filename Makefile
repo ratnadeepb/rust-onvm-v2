@@ -15,7 +15,7 @@ release:
 	@$(CC) build --release
 
 test:
-	@$(CC) run
+	@$(CC) test -- --nocapture --show-output -q
 
-#exp:
-#	@export LOCAL_FFI_PATH=/capsule-ffi
+clean:
+	@$(CC) clean
