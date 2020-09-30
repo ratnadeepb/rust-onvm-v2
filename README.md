@@ -71,7 +71,7 @@ Latest DPDK version can be found [here](http://core.dpdk.org/download/).
 ```bash
 wget https://fast.dpdk.org/rel/dpdk-19.11.4.tar.xz
 tar xvfh dpdk-19.11.4.tar.xz
-echo "if [ -d /mydata/dpdk-stable-19.11.4 ]; then
+echo "if [ -d $HOME/dpdk-stable-19.11.4 ]; then
         export RTE_SDK=/mydata/dpdk-stable-19.11.4
 fi" >> ~/.bashrc
 echo "export RTE_TARGET=x86_64-native-linuxapp-gcc"  >> ~/.bashrc
@@ -90,8 +90,14 @@ EXTRA_CFLAGS=" -fPIC " make install T=$RTE_TARGET -j 8
 #### Using meson and ninja
 
 ```bash
-EXTRA_CFLAGS=" -fPIC " meson build
-cd build && EXTRA_CFLAGS=" -fPIC " ninja && sudo EXTRA_CFLAGS=" -fPIC " ninja install
+meson build
+cd build && ninja && sudo ninja install
+```
+
+#### Export the Libraries
+
+```bash
+export LD_LIBRARY_PATH=/usr/local/lib/x86_64-linux-gnu/
 ```
 
 ### Setup driver and Hugepages
@@ -112,9 +118,23 @@ set_numa_pages
 ## Makefile
 
 The Makefile is rather simple as of now.</br>
-By default, running `make` runs `cargo check` but so does `make check`. Similarly, there are options to `make debug`, `make release` and `make run` and they behave in manners suggested by the target names.
+By default, running `make` runs `cargo check` but so does `make check`. Similarly, there are options to `make debug`, `make release` and `make test` and they behave in manners suggested by the target names.
 
 <b>As of now, I doubt running `make run` will be much helpful</b>
+
+## Debugging
+
+In the custom capsule-ffi, the bindgen layout tests are disabled. So only the tests in the onvm module run. So far in the absence of an executable, debugging is print statement based.
+
+The tests run automatically with the `nocapture`, `show-output` and `quiet` options.
+
+As a hack, the `onvm_run_init` test prints the environment variables it was passed out. The first env var is the name of executable that is running the test. So that executable can be passed to GDB/LLDB for further debugging. For example, the following can be done:
+
+```bash
+gdb --args ./target/debug/deps/onvm_mgr-0723e2bfe1aaa732 -- -l 0-3
+```
+
+`gdb` can be replaced by `lldb` or `rust-lldb` or `rust-gdb` (these are the same as gdb and lldb).
 
 ## Lofty, long term Goals and Differences with openNetVM
 
