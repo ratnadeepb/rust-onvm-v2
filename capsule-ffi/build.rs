@@ -58,7 +58,7 @@ const RTE_CORE_LIBS: &[&str] = &[
     "rte_kvargs",
     "rte_latencystats",
     "rte_lpm",
-    "rte_malloc", // Added by Deep
+    // "rte_malloc", // Added by Deep
     "rte_mbuf",
     "rte_member",
     "rte_mempool",
@@ -178,6 +178,7 @@ fn bind(path: &Path) {
     bindgen::Builder::default()
         .header("src/bindings.h")
         .generate_comments(true)
+        .layout_tests(false) // added by Deep
         .generate_inline_functions(true)
         // treat as opaque as per issue w/ combining align/packed:
         // https://github.com/rust-lang/rust-bindgen/issues/1538
