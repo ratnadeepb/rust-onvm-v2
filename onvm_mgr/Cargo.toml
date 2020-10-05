@@ -12,6 +12,7 @@ bit_field = "0.10.1"
 failure = "0.1.8"
 exitfailure = "0.5.1"
 capsule-ffi = {path = "../capsule-ffi"}
+capsule = {path = "../capsule"}
 num_cpus = "1.13.0"
 # lazy_static = "1.4.0"
 getopts = "0.2.21"

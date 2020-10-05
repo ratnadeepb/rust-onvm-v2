@@ -34,8 +34,7 @@ static mut PROGNAME: Option<String> = None;
 pub fn parse_app_args(
 	max_ports: u16,
 	global_state: &mut global::GlobalNFState,
-	argc: c_int,
-	argv: *mut *mut c_char,
+	args: Vec<String>,
 ) -> Result<(), ExitFailure> {
 	// let option_index;
 	// let opt;
@@ -43,13 +42,15 @@ pub fn parse_app_args(
 	lgopts.optopt("p", "port-mask", "", "");
 	lgopts.optopt("r", "num-services", "", "");
 	lgopts.optopt("n", "nf-cores", "", "");
-	let a = unsafe { std::slice::from_raw_parts(*argv, argc as usize) };
+	// let a = unsafe { std::slice::from_raw_parts(*argv, argc as usize) };
 	// std::mem::replace(&mut *PROGNAME, a[0].to_string());
-	unsafe { PROGNAME = Some(a[0].to_string()) }
+	// unsafe { PROGNAME = Some(a[0].to_string()) }
 
-	let cs = unsafe { CString::from_raw(*argv) };
+	// let cs = unsafe { CString::from_raw(*argv) };
+	// let cs =
 
-	let matches = match lgopts.parse(cs.to_str()) {
+	// let matches = match lgopts.parse(cs.to_str()) {
+	let matches = match lgopts.parse(args) {
 		Ok(matches) => matches,
 		Err(e) => {
 			let e = format!("No arguments provided for the switch: {}", e);

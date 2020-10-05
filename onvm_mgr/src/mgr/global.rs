@@ -18,6 +18,9 @@ use capsule_ffi::{
 	ETH_MQ_RX_RSS_FLAG, ETH_RSS_IP, ETH_RSS_L2_PAYLOAD, ETH_RSS_TCP, ETH_RSS_UDP,
 	RTE_ETHER_MAX_LEN,
 };
+
+use capsule::dpdk::Mempool;
+
 use fragile::Fragile;
 use std::cell::RefCell;
 use std::ffi::c_void;
@@ -29,10 +32,14 @@ pub struct GlobalNFState {
 	// REVIEW: is the type correct? Do they need to be thread-safe (RwLock)?
 	// REVIEW: Still debating if global state fields should be Arc<RwLock<_>> or not. A speed vs safety debate.
 	// NOTE: the lifetime is static since we expect the global state to last throughout the program
-	pub incoming_msg_queue: RefCell<*mut rte_ring>,
-	pub pktmbuf_pool: RefCell<*mut rte_mempool>,
-	pub nf_msg_pool: RefCell<*mut rte_mempool>,
-	pub nf_init_cfg_pool: RefCell<*mut rte_mempool>,
+	// pub incoming_msg_queue: RefCell<*mut rte_ring>,
+	pub incoming_msg_queue: RefCell<rte_ring>,
+	// pub pktmbuf_pool: RefCell<*mut rte_mempool>,
+	// pub nf_msg_pool: RefCell<*mut rte_mempool>,
+	// pub nf_init_cfg_pool: RefCell<*mut rte_mempool>,
+	pub pktmbuf_pool: RefCell<Mempool>,     // RefCell<rte_mempool>,
+	pub nf_msg_pool: RefCell<Mempool>,      // RefCell<rte_mempool>,
+	pub nf_init_cfg_pool: RefCell<Mempool>, // RefCell<rte_mempool>,
 	pub services: Vec<RefCell<*mut c_void>>,
 	pub nf_per_service_count: Vec<RefCell<u32>>,
 	pub num_sockets: RwLock<u16>,
@@ -57,11 +64,12 @@ pub struct GlobalNFState {
 impl Default for GlobalNFState {
 	fn default() -> Self {
 		GlobalNFState {
-			incoming_msg_queue: RefCell::new(ptr::null_mut()),
-			pktmbuf_pool: RefCell::new(ptr::null_mut()),
-			nf_msg_pool: RefCell::new(ptr::null_mut()),
+			// incoming_msg_queue: RefCell::new(ptr::null_mut()),
+			incoming_msg_queue: RefCell::(newptr::null_mut()),
+			pktmbuf_pool: Default::default(), //RefCell::new(ptr::null_mut()),
+			nf_msg_pool: Default::default(),  //RefCell::new(ptr::null_mut()),
 			// nf_msg_pool: Some(ptr::null_mut()),
-			nf_init_cfg_pool: RefCell::new(ptr::null_mut()),
+			nf_init_cfg_pool: Default::default(), //RefCell::new(ptr::null_mut()),
 			services: vec![],
 			nf_per_service_count: vec![],
 			num_sockets: RwLock::new(0),

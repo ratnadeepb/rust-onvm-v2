@@ -18,6 +18,7 @@ use std::cell::RefCell;
 use std::sync::Arc;
 use std::{mem, ptr};
 // NOTE: don't depend on the actual values of ENOTSUP and ENODEV. These two are required in the init_port function
+use capsule::dpdk::{eal_cleanup, eal_init, Mempool};
 use libc::{EINVAL, EIO, ENODEV, ENOMEM, ENOTSUP};
 
 // DPDK structures
@@ -28,19 +29,19 @@ use capsule_ffi::{
 };
 // DPDK functions
 use capsule_ffi::{
-	_rte_errno, rte_calloc, rte_delay_us_sleep, rte_eal_init, rte_eth_dev_adjust_nb_rx_tx_desc,
-	rte_eth_dev_configure, rte_eth_dev_count_avail, rte_eth_dev_info_get, rte_eth_dev_socket_id,
-	rte_eth_dev_start, rte_eth_link_get_nowait, rte_eth_macaddr_get, rte_eth_promiscuous_enable,
-	rte_eth_rx_queue_setup, rte_eth_tx_queue_setup, rte_exit, rte_lcore_count, rte_mempool_create,
-	rte_memzone_reserve, rte_pktmbuf_init, rte_pktmbuf_pool_init, rte_ring_create, rte_socket_id,
-	rte_strerror,
+	_rte_errno, rte_calloc, rte_delay_us_sleep, rte_eal_init,
+	rte_eth_dev_adjust_nb_rx_tx_desc, rte_eth_dev_configure, rte_eth_dev_count_avail,
+	rte_eth_dev_info_get, rte_eth_dev_socket_id, rte_eth_dev_start, rte_eth_link_get_nowait,
+	rte_eth_macaddr_get, rte_eth_promiscuous_enable, rte_eth_rx_queue_setup,
+	rte_eth_tx_queue_setup, rte_exit, rte_lcore_count, rte_mempool_create, rte_memzone_reserve,
+	rte_pktmbuf_init, rte_pktmbuf_pool_init, rte_ring_create, rte_socket_id, rte_strerror,
 };
 // DPDK constants
 use capsule_ffi::{
 	rte_eth_tx_mq_mode, DEV_RX_OFFLOAD_IPV4_CKSUM, DEV_RX_OFFLOAD_TCP_CKSUM,
 	DEV_RX_OFFLOAD_UDP_CKSUM, DEV_TX_OFFLOAD_IPV4_CKSUM, DEV_TX_OFFLOAD_MBUF_FAST_FREE,
 	DEV_TX_OFFLOAD_TCP_CKSUM, DEV_TX_OFFLOAD_UDP_CKSUM, ETH_LINK_FULL_DUPLEX, ETH_MQ_RX_RSS_FLAG,
-	ETH_RSS_IP, ETH_RSS_L2_PAYLOAD, ETH_RSS_TCP, ETH_RSS_UDP, RTE_ETHER_MAX_LEN,
+	ETH_RSS_IP, ETH_RSS_L2_PAYLOAD, ETH_RSS_TCP, ETH_RSS_UDP, RTE_ETHER_MAX_LEN, RTE_MEMZONE_2MB,
 };
 
 /// Start the OpenNetVM manager
@@ -75,52 +76,80 @@ pub fn init(mut args: Vec<String>) -> Result<(), ExitFailure> {
 		// _v.shrink_to_fit();
 		// let mut argv = _v.as_mut_ptr();
 		// mem::forget(_v);
-		let len = args.len() as c_int;
-		let args = args
-			.into_iter()
-			.map(|s| CString::new(s))
-			.collect::<Vec<_>>();
-		let mut ptrs = args
-			.iter()
-			.map(|_s| {
-				if let Ok(s) = _s {
-					s.as_ptr() as *mut c_char
-				} else {
-					"".as_ptr() as *mut c_char // We expect this to never run
-				}
-			})
-			.collect::<Vec<_>>();
+		// let len = args.len() as c_int;
+		// let args = args
+		// 	.into_iter()
+		// 	.map(|s| CString::new(s))
+		// 	.collect::<Vec<_>>();
+		// let mut ptrs = args
+		// 	.iter()
+		// 	.map(|_s| {
+		// 		if let Ok(s) = _s {
+		// 			s.as_ptr() as *mut c_char
+		// 		} else {
+		// 			"".as_ptr() as *mut c_char // We expect this to never run
+		// 		}
+		// 	})
+		// 	.collect::<Vec<_>>();
 		// let mut ptrs = args
 		// 	.iter()
 		// 	.map(|s| s.as_ptr() as *mut c_char)
 		// 	.collect::<Vec<_>>();
-		let mut argc = len;
-		let mut argv = ptrs.as_mut_ptr();
-		retval = rte_eal_init(argc, argv);
-		println!("return from \"rte_eal_init\": {}", retval); // DEBUG
-		if retval != 0 {
-			rte_exit(1, "EAL init failed\n\n" as *const _ as *const i8);
-			return Ok(exit_on_failure(
-				"EAL failed\n".into(),
-				"In the init function\n",
-			)?);
-		}
-		argc -= retval;
+		// let mut argc = len;
+		// let mut argv = ptrs.as_mut_ptr();
+		// retval = rte_eal_init(argc, argv);
+		println!("args: {:?}", args);
+		let mut all_args = args.split(|elem| elem == "--");
+		let _d;
+		let dpdk_args = match all_args.next() {
+			Some(s) => s,
+			None => {
+				_d = [("".to_string())];
+				&_d
+			}
+		};
+		println!("dpdk_args: {:?}", dpdk_args);
+		let _o;
+		let onvm_args = match all_args.next() {
+			Some(s) => s,
+			None => {
+				_o = [("".to_string())];
+				&_o
+			}
+		};
+		println!("onvm_args: {:?}", onvm_args);
+		if let Err(_) = eal_init(Vec::from(dpdk_args)) {
+			if let Err(e) = eal_cleanup() {
+				panic!("{:?}", e);
+			}
+		};
+		println!("EAL started successfully");
+		// println!("return from \"rte_eal_init\": {}", retval); // DEBUG
+		// if retval != 0 {
+		// 	rte_exit(1, "EAL init failed\n\n" as *const _ as *const i8);
+		// 	return Ok(exit_on_failure(
+		// 		"EAL failed\n".into(),
+		// 		"In the init function\n",
+		// 	)?);
+		// }
+		// argc -= retval;
 		// let cs = CString::from_raw(*argv);
 		// NOTE: Generally this style of pointer arithmatic looks like a bad idea in Rust, but for char (1 byte) array, this is probably okay
-		argv = (argv as usize + retval as usize) as *mut *mut i8;
+		// argv = (argv as usize + retval as usize) as *mut *mut i8;
 
 		/* get total number of ports */
 		total_ports = rte_eth_dev_count_avail();
+		println!("Got total ports: {}", total_ports);
 
 		/* set up array for NF tx data */
-		let mut tmp = rte_memzone_reserve(
+		let mut tmp = _rte_memzone_reserve(
 			nflib::constants::MZ_NF_INFO as *const _ as *const i8,
 			(mem::size_of::<nflib::structs::OnvmNF>() * nflib::constants::MAX_NFS as usize) as u64,
 			rte_socket_id() as i32,
 			constants::NO_FLAGS.into(),
 		);
 		if tmp.is_null() {
+			unsafe { println!("{:?}", *rte_strerror(_rte_errno())) };
 			rte_exit(
 				1,
 				"Cannot reserve memory zone for nf information\n" as *const _ as *const i8,
@@ -140,7 +169,7 @@ pub fn init(mut args: Vec<String>) -> Result<(), ExitFailure> {
 		global_state.nfs = v_tmp;
 
 		/* set up ports info */
-		tmp = rte_memzone_reserve(
+		tmp = _rte_memzone_reserve(
 			nflib::constants::MZ_PORT_INFO as *const _ as *const i8,
 			mem::size_of::<nflib::structs::PortInfo>() as u64,
 			rte_socket_id() as i32,
@@ -159,7 +188,7 @@ pub fn init(mut args: Vec<String>) -> Result<(), ExitFailure> {
 
 		/* set up core status */
 		let cores = num_cpus::get();
-		tmp = rte_memzone_reserve(
+		tmp = _rte_memzone_reserve(
 			nflib::constants::MZ_CORES_STATUS as *const _ as *const i8,
 			(mem::size_of::<nflib::structs::CoreStatus>() * cores) as u64,
 			rte_socket_id() as i32,
@@ -187,7 +216,7 @@ pub fn init(mut args: Vec<String>) -> Result<(), ExitFailure> {
 
 		/* set up array for NF tx data */
 		// NOTE: get a chunk of memory for the services
-		tmp = rte_memzone_reserve(
+		tmp = _rte_memzone_reserve(
 			nflib::constants::MZ_SERVICES_INFO as *const _ as *const i8,
 			(mem::size_of::<nflib::structs::CoreStatus>() * nflib::constants::MAX_SERVICES as usize)
 				as u64,
@@ -221,7 +250,7 @@ pub fn init(mut args: Vec<String>) -> Result<(), ExitFailure> {
 			));
 		}
 
-		tmp = rte_memzone_reserve(
+		tmp = _rte_memzone_reserve(
 			nflib::constants::MZ_NF_PER_SERVICE_INFO as *const _ as *const i8,
 			mem::size_of::<c_void>() as u64,
 			rte_socket_id() as i32,
@@ -244,7 +273,7 @@ pub fn init(mut args: Vec<String>) -> Result<(), ExitFailure> {
 		);
 
 		/* set up custom flags */
-		tmp = rte_memzone_reserve(
+		tmp = _rte_memzone_reserve(
 			nflib::constants::MZ_ONVM_CONFIG as *const _ as *const i8,
 			mem::size_of::<nflib::structs::OnvmConfiguration>() as u64,
 			rte_socket_id() as i32,
@@ -270,7 +299,8 @@ pub fn init(mut args: Vec<String>) -> Result<(), ExitFailure> {
 
 		/* parse additional, application arguments */
 		// NOTE: parse_app_args return an ExitFailure and so does init. Thus we can simply use ? to pass an error up to whichever executable uses this lib
-		get_args::parse_app_args(total_ports, &mut global_state, argc, argv)?;
+		// get_args::parse_app_args(total_ports, &mut global_state, argc, argv)?;
+		get_args::parse_app_args(total_ports, &mut global_state, Vec::from(onvm_args))?;
 
 		/* initialise mbuf pools */
 		init_mbuf_pools(&mut global_state)?;
@@ -336,7 +366,7 @@ fn init_mbuf_pools(global_state: &mut global::GlobalNFState) -> Result<(), ExitF
 	);
 
 	*global_state.pktmbuf_pool.borrow_mut() = unsafe {
-		rte_mempool_create(
+		*rte_mempool_create(
 			nflib::constants::PKTMBUF_POOL_NAME as *const _ as *const i8,
 			nflib::constants::NUM_MBUFS.into(),
 			constants::MBUF_SIZE as u32,
@@ -350,12 +380,12 @@ fn init_mbuf_pools(global_state: &mut global::GlobalNFState) -> Result<(), ExitF
 			nflib::constants::NO_FLAGS,
 		)
 	};
-	if (*global_state.pktmbuf_pool.borrow()).is_null() {
-		return Ok(exit_on_failure(
-			"Cannot create needed mbuf pools".into(),
-			"Failed in the init_mbuf function",
-		)?);
-	}
+	// if (*global_state.pktmbuf_pool.borrow()).is_null() {
+	// 	return Ok(exit_on_failure(
+	// 		"Cannot create needed mbuf pools".into(),
+	// 		"Failed in the init_mbuf function",
+	// 	)?);
+	// }
 	Ok(())
 }
 
@@ -368,7 +398,7 @@ fn init_nf_msg_pool(global_state: &mut global::GlobalNFState) -> Result<(), Exit
 		nflib::constants::_NF_MSG_POOL_NAME
 	);
 	*global_state.nf_msg_pool.borrow_mut() = unsafe {
-		rte_mempool_create(
+		*rte_mempool_create(
 			nflib::constants::_NF_MSG_POOL_NAME as *const _ as *const i8,
 			(nflib::constants::MAX_NFS as u32 * constants::NF_MSG_QUEUE_SIZE as u32).into(),
 			constants::NF_INFO_SIZE as u32,
@@ -382,18 +412,18 @@ fn init_nf_msg_pool(global_state: &mut global::GlobalNFState) -> Result<(), Exit
 			nflib::constants::NO_FLAGS,
 		)
 	};
-	if (*global_state.pktmbuf_pool.borrow()).is_null() {
-		let f = unsafe {
-			format!(
-				"Cannot create nf info mbuf pool: {:?}",
-				rte_strerror(_rte_errno())
-			)
-		};
-		return Ok(exit_on_failure(
-			f,
-			"Failed in the init_nf_msg_pool function",
-		)?);
-	}
+	// if (*global_state.pktmbuf_pool.borrow()).is_null() {
+	// 	let f = unsafe {
+	// 		format!(
+	// 			"Cannot create nf info mbuf pool: {:?}",
+	// 			rte_strerror(_rte_errno())
+	// 		)
+	// 	};
+	// 	return Ok(exit_on_failure(
+	// 		f,
+	// 		"Failed in the init_nf_msg_pool function",
+	// 	)?);
+	// }
 	Ok(())
 }
 
@@ -405,7 +435,7 @@ fn init_nf_init_cfg_pool(global_state: &mut global::GlobalNFState) -> Result<(),
 	);
 
 	*global_state.nf_init_cfg_pool.borrow_mut() = unsafe {
-		rte_mempool_create(
+		*rte_mempool_create(
 			nflib::constants::_NF_MEMPOOL_NAME as *const _ as *const i8,
 			nflib::constants::MAX_NFS.into(),
 			constants::NF_INFO_SIZE as u32,
@@ -419,18 +449,18 @@ fn init_nf_init_cfg_pool(global_state: &mut global::GlobalNFState) -> Result<(),
 			nflib::constants::NO_FLAGS,
 		)
 	};
-	if (*global_state.nf_init_cfg_pool.borrow()).is_null() {
-		let f = unsafe {
-			format!(
-				"Cannot create nf info mbuf pool: {:?}\n",
-				rte_strerror(_rte_errno())
-			)
-		};
-		return Ok(exit_on_failure(
-			f,
-			"Failed in the init_nf_msg_pool function",
-		)?);
-	}
+	// if (*global_state.nf_init_cfg_pool.borrow()).is_null() {
+	// 	let f = unsafe {
+	// 		format!(
+	// 			"Cannot create nf info mbuf pool: {:?}\n",
+	// 			rte_strerror(_rte_errno())
+	// 		)
+	// 	};
+	// 	return Ok(exit_on_failure(
+	// 		f,
+	// 		"Failed in the init_nf_msg_pool function",
+	// 	)?);
+	// }
 	// println!("Cannot create nf message pool: %s\n", rte_strerror(rte_errno));
 	Ok(())
 }
@@ -688,19 +718,19 @@ fn check_all_ports_link_status(
 /// Allocate a rte_ring for newly created NFs
 fn init_info_queue(global_state: &mut global::GlobalNFState) {
 	*global_state.incoming_msg_queue.borrow_mut() = unsafe {
-		rte_ring_create(
+		*rte_ring_create(
 			nflib::constants::_MGR_MSG_QUEUE_NAME as *const _ as *const i8,
 			nflib::constants::MAX_NFS.into(),
 			rte_socket_id() as i32,
 			constants::RING_F_SC_DEQ,
 		)
 	}; // MP enqueue (default), SC dequeue
-	if (*global_state.incoming_msg_queue.borrow()).is_null() {
-		unsafe {
-			rte_exit(
-				1,
-				"Cannot create incoming msg queue" as *const _ as *const i8,
-			);
-		}
-	}
+	 // if (*global_state.incoming_msg_queue.borrow()).is_null() {
+	 // 	unsafe {
+	 // 		rte_exit(
+	 // 			1,
+	 // 			"Cannot create incoming msg queue" as *const _ as *const i8,
+	 // 		);
+	 // 	}
+	 // }
 }

@@ -241,7 +241,7 @@ fn onvm_nf_stop(
 		}
 
 		*global_state.nf_msg_pool.borrow_mut() =
-			rte_mempool_lookup(&nflib::constants::_NF_MSG_POOL_NAME[..] as *const _ as *const i8);
+			*rte_mempool_lookup(&nflib::constants::_NF_MSG_POOL_NAME[..] as *const _ as *const i8);
 		// let a = *global_state.nf_msg_pool.borrow_mut();
 		let _msg_q = *(*(*global_state.nfs[nf_id as usize].clone()))
 			.msg_q
@@ -259,7 +259,7 @@ fn onvm_nf_stop(
 					// if let Some(msg_pool) = global_state.nf_msg_pool {
 					// 	_rte_mempool_put(msg_pool, m);
 					// _rte_mempool_put(global_state.nf_msg_pool, &mut msg as *mut _ as *mut c_void)
-					_rte_mempool_put(*global_state.nf_msg_pool.borrow_mut(), m);
+					_rte_mempool_put(&mut *global_state.nf_msg_pool.borrow_mut(), m);
 					// }
 				}
 			}
@@ -365,7 +365,7 @@ pub fn onvm_nf_check_status(global_state: &global::GlobalNFState) {
 	// One can't have a vec of trait objects because trait objects are not sized
 	let mut msgs =
 		Vec::<nflib::structs::OnvmNFMsg>::with_capacity(nflib::constants::MAX_NFS as usize);
-	let num_msgs = unsafe { _rte_ring_count(*global_state.incoming_msg_queue.borrow_mut()) };
+	let num_msgs = unsafe { _rte_ring_count(&*global_state.incoming_msg_queue.borrow_mut()) };
 
 	if num_msgs == 0 {
 		return;
@@ -373,7 +373,7 @@ pub fn onvm_nf_check_status(global_state: &global::GlobalNFState) {
 
 	unsafe {
 		if _rte_ring_dequeue_bulk(
-			*global_state.incoming_msg_queue.borrow_mut(),
+			&mut *global_state.incoming_msg_queue.borrow_mut(),
 			&mut (msgs.as_mut_ptr() as *mut _ as *mut c_void),
 			num_msgs,
 			ptr::null_mut(),
@@ -464,7 +464,7 @@ pub fn onvm_nf_check_status(global_state: &global::GlobalNFState) {
 		} // msg matching end
 		unsafe {
 			_rte_mempool_put(
-				*global_state.nf_msg_pool.borrow_mut(),
+				&mut *global_state.nf_msg_pool.borrow_mut(),
 				msgs.as_mut_ptr() as *mut _ as *mut c_void,
 			);
 		}
@@ -479,7 +479,7 @@ pub fn onvm_nf_send_msg(
 	let mut msg = Box::from(msg);
 	let ret = unsafe {
 		_rte_mempool_get(
-			*global_state.nf_msg_pool.borrow_mut(),
+			&mut *global_state.nf_msg_pool.borrow_mut(),
 			&mut (msg.as_mut() as *mut _ as *mut c_void),
 		)
 	};
