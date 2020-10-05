@@ -6,6 +6,7 @@
 use super::constants::*;
 use crate::error_handling::exit_on_failure;
 use exitfailure::ExitFailure;
+use std::cell::RefCell;
 use std::sync::Weak;
 // Functions
 use capsule_ffi::{rte_eth_dev_is_valid_port, rte_eth_macaddr_get};
@@ -17,11 +18,11 @@ use capsule_ffi::{RTE_LOGTYPE_USER1, RTE_MAX_ETHPORTS};
 // contains all structs for use in nflib
 
 /// Message passing
-pub struct OnvmNfMsg {
-	msg_type: u8, // Constant saying what type of message is
-	// FIXME: we need to figure out what msg_data should be
-	msg_data: String, // These should be rte_malloc'd so they're stored in hugepages
-}
+// pub struct OnvmNfMsg {
+// 	msg_type: u8, // Constant saying what type of message is
+// 	// FIXME: we need to figure out what msg_data should be
+// 	msg_data: String, // These should be rte_malloc'd so they're stored in hugepages
+// }
 
 pub enum OnvmAction {
 	DROP, // drop packet
@@ -31,10 +32,10 @@ pub enum OnvmAction {
 }
 
 pub struct OnvmPktMeta {
-	action: OnvmAction, // Action to be performed
-	destination: u16,   // where to go next
-	src: u16,           // who processed the packet last
-	chain_index: u8,    // index of the current step in the service chain
+	action: OnvmAction,  // Action to be performed
+	destination: u16,    // where to go next
+	src: u16,            // who processed the packet last
+	pub chain_index: u8, // index of the current step in the service chain
 	flags: u8, // bits for custom NF data. Use with caution to prevent collisions from different NFs
 }
 
@@ -104,13 +105,13 @@ impl TxThreadInfo {
 				}
 				// the local buffer points to null
 				None => Ok(exit_on_failure(
-					"Packet buffer does not exist",
+					"Packet buffer does not exist".into(),
 					"Packet Buffer pointer in tx thread info points to null",
 				)?),
 			},
 			// the original buffer is null
 			None => Ok(exit_on_failure(
-				"Packet buffer was not found",
+				"Packet buffer was not found".into(),
 				"Packet Buffer pointer in tx thread info is null",
 			)?),
 		}
@@ -176,7 +177,7 @@ pub struct WakeupThreadContext {
 
 #[derive(Default)]
 pub struct RxStats {
-	rx: [u64; RTE_MAX_ETHPORTS as usize],
+	pub rx: [u64; RTE_MAX_ETHPORTS as usize],
 }
 
 #[derive(Default)]
@@ -187,7 +188,7 @@ pub struct TxStats {
 
 #[derive(Default)]
 pub struct EtherAddr {
-	addr_bytes: [u8; 6],
+	pub addr_bytes: [u8; 6],
 }
 
 impl EtherAddr {
@@ -206,12 +207,12 @@ impl EtherAddr {
 
 #[derive(Default)]
 pub struct PortInfo {
-	num_ports: u8,
-	id: [u8; RTE_MAX_ETHPORTS as usize],
-	init: [u8; RTE_MAX_ETHPORTS as usize],
-	mac: [EtherAddr; RTE_MAX_ETHPORTS as usize],
-	rx_stats: RxStats,
-	tx_stats: TxStats,
+	pub num_ports: RefCell<u8>,
+	pub id: RefCell<[u8; RTE_MAX_ETHPORTS as usize]>,
+	pub init: RefCell<[u8; RTE_MAX_ETHPORTS as usize]>,
+	pub mac: [RefCell<EtherAddr>; RTE_MAX_ETHPORTS as usize],
+	pub rx_stats: RxStats,
+	pub tx_stats: TxStats,
 }
 
 #[derive(Default)]
@@ -221,20 +222,20 @@ struct Flag {
 
 #[derive(Default)]
 pub struct OnvmConfiguration {
-	flags: Flag,
+	flags: RefCell<Flag>,
 }
 
 impl OnvmConfiguration {
-	pub fn set_flag(&mut self, share: u8) {
-		self.flags.onvm_nf_share_cores = share;
+	pub fn set_flag(&self, share: u8) {
+		self.flags.borrow_mut().onvm_nf_share_cores = share;
 	}
 }
 
 #[derive(Default)]
 pub struct CoreStatus {
-	enabled: bool,
-	is_dedicated_core: bool,
-	nf_count: u16,
+	pub enabled: RefCell<bool>,
+	pub is_dedicated_core: RefCell<u16>,
+	pub nf_count: RefCell<u16>,
 }
 
 /// Function prototype for NF packet handlers
@@ -294,10 +295,10 @@ struct Flags {
 }
 
 #[derive(Default)]
-struct ThreadInfo {
-	core: u16, // Instance ID of parent NF or 0
-	parent: u16,
-	children_cut: rte_atomic16_t,
+pub struct ThreadInfo {
+	pub core: u16, // Instance ID of parent NF or 0
+	pub parent: u16,
+	pub children_count: rte_atomic16_t,
 }
 
 #[derive(Default)]
@@ -315,32 +316,45 @@ struct SharedCore {
 /// nf denotes the lifetime of the nf
 pub struct OnvmNF {
 	// REVIEW: we might want to change *mut rte_ring to something less risky!
-	rx_q: Option<*mut rte_ring>,
-	tx_q: Option<*mut rte_ring>,
-	msg_q: Option<*mut rte_ring>,
-	nf_tx_mgr: Option<QueueMgr>,
-	instance_id: u16,
-	service_id: u16,
-	status: u8,
-	tag: String,
+	pub rx_q: RefCell<Option<*mut rte_ring>>,
+	pub tx_q: RefCell<Option<*mut rte_ring>>,
+	pub msg_q: RefCell<Option<*mut rte_ring>>,
+	pub nf_tx_mgr: RefCell<QueueMgr>,
+	pub instance_id: RefCell<u16>,
+	pub service_id: RefCell<u16>,
+	pub status: RefCell<u16>,
+	pub tag: RefCell<String>,
 	// FIXME: we need to figure out what msg_data should be
 	// Connected to msg_common_rs::OnvmNfMsg
 	// void *data;
-	thread_info: ThreadInfo,
+	pub thread_info: RefCell<ThreadInfo>,
 	flags: Flags,
 	function_table: OnvmFunctionTable,
 	// stats: Option<&'nf String>,
 	shared_core: SharedCore,
 }
 
+pub enum OnvmNFMsg {
+	NfStarting(OnvmNfInitCfg),
+	NfReady(*mut OnvmNF),
+	NfStopping(*mut OnvmNF),
+}
+
+// // NOTE: This is a marker trait that simply indicates that types that can be sent as message data
+// pub trait OnvmMfgTrait {}
+
+// // NOTE: OnvmNfInitCfg and OnvmNF are marked as structs that can be part of an onvm msg
+// impl OnvmMfgTrait for OnvmNfInitCfg {}
+// impl OnvmMfgTrait for OnvmNF {}
+
 /// The config structure to inialize the NF with onvm_mgr
 #[derive(Default)]
 pub struct OnvmNfInitCfg {
-	instance_id: u16,
-	service_id: u16,
+	pub instance_id: u16,
+	pub service_id: u16,
 	core: u16,
 	init_options: u16,
-	status: u8,
+	pub status: u16,
 	tag: Option<String>,
 	// If set NF will stop after time reaches time_to_live
 	time_to_live: u16,

@@ -309,6 +309,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "num_cpus"
+version = "1.13.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "05499f3756671c15885fee9034446956fff3f243d6077b91e5767df161f766b3"
+dependencies = [
+ "hermit-abi",
+ "libc",
+]
+
+[[package]]
 name = "object"
 version = "0.20.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -324,7 +334,15 @@ dependencies = [
  "failure",
  "fragile",
  "getopts",
- "lazy_static",
+ "libc",
+ "num_cpus",
+]
+
+[[package]]
+name = "onvm_mgr_test"
+version = "0.1.0"
+dependencies = [
+ "onvm_mgr",
 ]
 
 [[package]]

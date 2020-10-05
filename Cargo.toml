@@ -1,5 +1,6 @@
 [workspace]
 members = [
 	"capsule-ffi",
-	"onvm_mgr"
+	"onvm_mgr",
+	"onvm_mgr_test",
 ]

@@ -134,6 +134,12 @@ As a hack, the `onvm_run_init` test prints the environment variables it was pass
 gdb --args ./target/debug/deps/onvm_mgr-0723e2bfe1aaa732 -- -l 0-3
 ```
 
+The repo now contains a `onvm_mgr_test` binary that uses the `onvm_mgr` lib underneath. It can be debugged with:
+
+```bash
+sudo gdb --args ./target/debug/onvm_mgr_test -l 0-3 -n 2 --proc-type=primary --base-virtaddr=0x7f000000000
+```
+
 `gdb` can be replaced by `lldb` or `rust-lldb` or `rust-gdb` (these are the same as gdb and lldb).
 
 ## Lofty, long term Goals and Differences with openNetVM

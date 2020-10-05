@@ -15,3 +15,6 @@ pub mod global;
 #[allow(dead_code, unused_variables, unused_assignments, unused_imports)]
 // remove once the code stabilises
 pub mod init;
+#[allow(dead_code, unused_variables, unused_assignments, unused_imports)]
+// remove once the code stabilises
+pub mod net_funcs;

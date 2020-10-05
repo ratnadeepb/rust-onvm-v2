@@ -177,15 +177,15 @@ fn bind(path: &Path) {
 
     bindgen::Builder::default()
         .header("src/bindings.h")
-        .generate_comments(true)
+        // .generate_comments(true)
         .layout_tests(false) // added by Deep
         .generate_inline_functions(true)
         // treat as opaque as per issue w/ combining align/packed:
         // https://github.com/rust-lang/rust-bindgen/issues/1538
         .opaque_type(r"rte_arp_ipv4|rte_arp_hdr")
-        .whitelist_type(r"(rte|eth|pcap)_.*")
-        .whitelist_function(r"(_rte|rte|eth|numa|pcap)_.*")
-        .whitelist_var(r"(RTE|DEV|ETH|MEMPOOL|PKT|rte)_.*")
+        // .whitelist_type(r"(rte|eth|pcap)_.*")
+        // .whitelist_function(r"(_rte|rte|eth|numa|pcap)_.*")
+        // .whitelist_var(r"(RTE|DEV|ETH|MEMPOOL|PKT|rte)_.*")
         .derive_copy(true)
         .derive_debug(true)
         .derive_default(true)

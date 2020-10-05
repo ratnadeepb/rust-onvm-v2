@@ -27,11 +27,11 @@ pub const ONVM_NF_SHUTDOWN_CORE_REASSIGNMENT: bool = false;
 // the maximum chain length
 pub const ONVM_MAX_CHAIN_LENGTH: u8 = 4;
 // total number of concurrent NFs allowed (-1 because ID 0 is reserved)
-pub const MAX_NFS: u8 = 128;
+pub const MAX_NFS: u32 = 128;
 // total number of unique services allowed
 pub const MAX_SERVICES: u8 = 32;
 // max number of NFs per service.
-pub const MAX_NFS_PER_SERVICE: u8 = 32;
+pub const MAX_NFS_PER_SERVICE: u32 = 32;
 // total number of mbufs (2^15 - 1)
 pub const NUM_MBUFS: u16 = 32767;
 // size of queue for NFs
@@ -45,19 +45,19 @@ const PKT_WAKEUP_THRESHOLD: u8 = 1;
 const MSG_WAKEUP_THRESHOLD: u8 = 1;
 
 // Used in setting bit flags for core options
-const MANUAL_CORE_ASSIGNMENT_BIT: bool = false;
-const SHARE_CORE_BIT: bool = true;
+pub const MANUAL_CORE_ASSIGNMENT_BIT: usize = 0;
+pub const SHARE_CORE_BIT: bool = true;
 
-const ONVM_SIGNAL_TERMINATION: i16 = -999;
+pub const ONVM_SIGNAL_TERMINATION: i16 = -999;
 
 // Maximum length of NF_TAG
-const TAG_SIZE: usize = 15;
+pub const TAG_SIZE: usize = 15;
 
 // Measured in millions of packets
-const PKT_TTL_MULTIPLIER: u32 = 1000000;
+pub const PKT_TTL_MULTIPLIER: u32 = 1000000;
 
 // Measured in seconds
-const TIME_TTL_MULTIPLIER: u8 = 1;
+pub const TIME_TTL_MULTIPLIER: u8 = 1;
 
 // For NF termination handling
 const NF_TERM_WAIT_TIME: u8 = 1;
@@ -69,22 +69,22 @@ pub const SHMSZ: u8 = 4; // size of shared memory segement (page_size)
 pub const KEY_PREFIX: u8 = 123; // prefix len for key
 
 /// common names for NF states
-pub const NF_WAITING_FOR_ID: u8 = 0; // First step in startup process, doesn't have ID confirmed by manager yet
-pub const NF_STARTING: u8 = 1; // When a NF is in the startup process and already has an id
-pub const NF_RUNNING: u8 = 2; // Running normally
-pub const NF_PAUSED: u8 = 3; // NF is not receiving packets, but may in the future
-pub const NF_STOPPED: u8 = 4; // NF has stopped and in the shutdown process
-pub const NF_ID_CONFLICT: u8 = 5; // NF is trying to declare an ID already in use
-pub const NF_NO_IDS: u8 = 6; // There are no available IDs for this NF
-pub const NF_SERVICE_MAX: u8 = 7; // Service ID has exceeded the maximum amount
-pub const NF_SERVICE_COUNT_MAX: u8 = 8; // Maximum amount of NF's per service spawned
-pub const NF_NO_CORES: u8 = 9; // There are no cores available or specified core can't be used
-pub const NF_NO_DEDICATED_CORES: u8 = 10; // There is no space for a dedicated core
-pub const NF_CORE_OUT_OF_RANGE: u8 = 11; // The manually selected core is out of range
-pub const NF_CORE_BUSY: u8 = 12; // The manually selected core is busy
-pub const NF_WAITING_FOR_LPM: u8 = 13; // NF is waiting for a LPM request to be fulfilled
-pub const NF_WAITING_FOR_FT: u8 = 14; // NF is waiting for a flow-table request to be fulfilled
-pub const NF_NO_ID: i8 = -1;
+pub const NF_WAITING_FOR_ID: u16 = 0; // First step in startup process, doesn't have ID confirmed by manager yet
+pub const NF_STARTING: u16 = 1; // When a NF is in the startup process and already has an id
+pub const NF_RUNNING: u16 = 2; // Running normally
+pub const NF_PAUSED: u16 = 3; // NF is not receiving packets, but may in the future
+pub const NF_STOPPED: u16 = 4; // NF has stopped and in the shutdown process
+pub const NF_ID_CONFLICT: u16 = 5; // NF is trying to declare an ID already in use
+pub const NF_NO_IDS: u16 = 6; // There are no available IDs for this NF
+pub const NF_SERVICE_MAX: u16 = 7; // Service ID has exceeded the maximum amount
+pub const NF_SERVICE_COUNT_MAX: u16 = 8; // Maximum amount of NF's per service spawned
+pub const NF_NO_CORES: u16 = 9; // There are no cores available or specified core can't be used
+pub const NF_NO_DEDICATED_CORES: u16 = 10; // There is no space for a dedicated core
+pub const NF_CORE_OUT_OF_RANGE: u16 = 11; // The manually selected core is out of range
+pub const NF_CORE_BUSY: u16 = 12; // The manually selected core is busy
+pub const NF_WAITING_FOR_LPM: u16 = 13; // NF is waiting for a LPM request to be fulfilled
+pub const NF_WAITING_FOR_FT: u16 = 14; // NF is waiting for a flow-table request to be fulfilled
+pub const NF_NO_ID: i16 = -1;
 
 pub const NO_FLAGS: u32 = 0;
 
