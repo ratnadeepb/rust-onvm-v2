@@ -1,0 +1,20 @@
+[package]
+name = "capsule-macros"
+version = "0.1.4"
+authors = ["Capsule Developers <capsule-dev@googlegroups.com>"]
+license = "Apache-2.0"
+edition = "2018"
+repository = "https://github.com/capsule-rs/capsule"
+description = """
+Capsule procedural macros.
+"""
+
+[lib]
+name = "capsule_macros"
+proc-macro = true
+doctest = false
+
+[dependencies]
+darling ="0.10"
+quote = "1.0"
+syn = { version = "1.0", features = ["full"] }

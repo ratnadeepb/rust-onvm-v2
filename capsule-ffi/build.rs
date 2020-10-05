@@ -173,6 +173,7 @@ fn bind(path: &Path) {
     cc::Build::new()
         .file("src/shim.c")
         .flag("-march=corei7")
+        .flag("-mavx")
         .compile("rte_shim");
 
     bindgen::Builder::default()
