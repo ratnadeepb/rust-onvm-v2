@@ -1,5 +1,8 @@
 # Attempt to migrate openNetVM to Rust
 
+### Detour to DPDK FFI
+I was working on this repo to build a generic DPDK FFI interface for Rust. Some way down the line, I realised that I was re-inventing a lot of the wheel. Thus, I have had to take a little detour to understand async Rust (async-std, Futures, Tokio and mio) better. This would lead to a more stable runtime. The capsule team is working on the same thing right now. So I might again come back and fork off their work if possible, otherwise I am going to implement as much of a runtime as I possibly can.
+
 ## openNetVM
 This is an attempt to migrate openNetVM developed and maintained primarily by Dr. Timothy Wood and his team at the George Washington University.
 
