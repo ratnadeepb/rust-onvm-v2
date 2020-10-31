@@ -1,6 +1,12 @@
 # Attempt to migrate openNetVM to Rust
 
-### Detour to DPDK FFI
+## Async Demos, DPDK-FFI and L2Switch
+
+- `Rust_async_demos` contain several smaller, maybe unfinished, crates that attempt to demonstrate various concepts in async Rust. I used these to learn.
+- `dpdk-ffi` contains a demo running DPDK from Rust. This was an early work that I kept around in case others find it useful.
+- `l2switch` is the repo that I am currently working on. This is aimed at being a L2 virtual switch using DPDK primary and secondary processing. Hopefully, we will later add L3 processing in the secondary DPDK processes. I am developing the runtime here directly with Rust futures. If successful, the same can be later used for openNetVM.
+
+## Detour to DPDK FFI
 I was working on this repo to build a generic DPDK FFI interface for Rust. Some way down the line, I realised that I was re-inventing a lot of the wheel. Thus, I have had to take a little detour to understand async Rust (async-std, Futures, Tokio and mio) better. This would lead to a more stable runtime. The capsule team is working on the same thing right now. So I might again come back and fork off their work if possible, otherwise I am going to implement as much of a runtime as I possibly can.
 
 Some of that work can be found here: https://github.com/ratnadeepb/dpdk-ffi

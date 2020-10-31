@@ -1,0 +1,9 @@
+[submodule "l2switch"]
+	path = l2switch
+	url = https://github.com/ratnadeepb/l2switch.git
+[submodule "Rust_async_demos"]
+	path = Rust_async_demos
+	url = https://github.com/ratnadeepb/Rust_async_demos.git
+[submodule "dpdk-ffi"]
+	path = dpdk-ffi
+	url = https://github.com/ratnadeepb/dpdk-ffi.git
